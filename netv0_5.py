@@ -3,22 +3,36 @@ import torch.nn as nn
 from torch.nn import Conv2d, LeakyReLU, BatchNorm2d, ConvTranspose2d, ReLU
 from lib.ECA import ECA_layer
 from lib.CBAM import CBAM
+from lib.GAM import GAM
+from lib.SENet import SELayer
+from torchinfo import summary
 
 
+
+# def DepthwiseSeparableConv(in_channels, out_channels, kernel_size=4, stride=2, padding=1):
+#     layer = nn.Sequential(
+#         Conv2d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding),
+#         Conv2d(in_channels, out_channels, kernel_size=1),
+#         BatchNorm2d(out_channels),
+#         LeakyReLU(0.2)
+#     )
+#
+#     return layer
 
 def DepthwiseSeparableConv(in_channels, out_channels, kernel_size=4, stride=2, padding=1):
     layer = nn.Sequential(
-        Conv2d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding),
+        Conv2d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=in_channels),
+        BatchNorm2d(in_channels),
+        ReLU(inplace=True),
         Conv2d(in_channels, out_channels, kernel_size=1),
         BatchNorm2d(out_channels),
-        LeakyReLU(0.2)
+        ReLU(inplace=True)
     )
 
     return layer
 
 
-
-def encoder_layer(in_channels, out_channels, kernel_size=4, stride=2, padding=1):
+def encoder_layer(in_channels, out_channels, kernel_size=3, stride=2, padding=1):
     layer = nn.Sequential(
         Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding),
         BatchNorm2d(out_channels),
@@ -67,24 +81,38 @@ class GeneratorNet(torch.nn.Module):
         # self.enc_conv3 = encoder_layer(64, 128)
         # self.enc_conv4 = encoder_layer(128, 256)
         # self.enc_conv5 = encoder_layer(256, 256, padding=1)
+        self.se_layer1 = SELayer(3)
+        self.enc_conv1 = encoder_layer(3, 32)
 
-        self.enc_conv1 = DepthwiseSeparableConv(3, 32)
-        self.enc_conv2 = DepthwiseSeparableConv(32, 64)
-        self.enc_conv3 = DepthwiseSeparableConv(64, 128)
-        self.enc_conv4 = DepthwiseSeparableConv(128, 256)
-        self.enc_conv5 = DepthwiseSeparableConv(256, 256, padding=1)
+        self.se_layer2 = SELayer(32)
+        self.enc_conv2 = encoder_layer(32, 64)
+
+        self.se_layer3 = SELayer(64)
+        self.enc_conv3 = encoder_layer(64, 128)
+
+        self.se_layer4 = SELayer(128)
+        self.enc_conv4 = encoder_layer(128, 256)
+
+        self.se_layer5 = SELayer(256)
+        self.enc_conv5 = encoder_layer(256, 256, padding=1)
 
         # self.enc_eca1 = ECA_layer(32)
         # self.enc_eca2 = ECA_layer(64)
         # self.enc_eca3 = ECA_layer(128)
         # self.enc_eca4 = ECA_layer(256)
         # self.enc_eca5 = ECA_layer(256)
+        #
+        self.enc_cbam1 = CBAM(32)
+        self.enc_cbam2 = CBAM(64)
+        self.enc_cbam3 = CBAM(128)
+        self.enc_cbam4 = CBAM(256)
+        self.enc_cbam5 = CBAM(256)
 
-        self.enc_eca1 = CBAM(32)
-        self.enc_eca2 = CBAM(64)
-        self.enc_eca3 = CBAM(128)
-        self.enc_eca4 = CBAM(256)
-        self.enc_eca5 = CBAM(256)
+        # self.enc_gam1 = GAM(32, 32)
+        # self.enc_gam2 = GAM(64, 64)
+        # self.enc_gam3 = GAM(128, 128)
+        # self.enc_gam4 = GAM(256, 256)
+        # self.enc_gam5 = GAM(256, 256)
 
         # Decoder
         self.dec_conv1 = decoder_layer(256, 256)
@@ -96,20 +124,35 @@ class GeneratorNet(torch.nn.Module):
 
     def forward(self, input_x):
         # Encoder
-        output_enc_conv1 = self.enc_conv1(input_x)
-        output_enc_conv1 = self.enc_eca1(output_enc_conv1)
+        output_enc_conv1 = self.se_layer1(input_x)
+        output_enc_conv1 = self.enc_conv1(output_enc_conv1)
+        output_enc_conv1 = self.enc_cbam1(output_enc_conv1)
 
-        output_enc_conv2 = self.enc_conv2(output_enc_conv1)
-        output_enc_conv2 = self.enc_eca2(output_enc_conv2)
+        output_enc_conv2 = self.se_layer2(output_enc_conv1)
+        output_enc_conv2 = self.enc_conv2(output_enc_conv2)
+        output_enc_conv2 = self.enc_cbam2(output_enc_conv2)
 
-        output_enc_conv3 = self.enc_conv3(output_enc_conv2)
-        output_enc_conv3 = self.enc_eca3(output_enc_conv3)
+        output_enc_conv3 = self.se_layer3(output_enc_conv2)
+        output_enc_conv3 = self.enc_conv3(output_enc_conv3)
+        output_enc_conv3 = self.enc_cbam3(output_enc_conv3)
 
-        output_enc_conv4 = self.enc_conv4(output_enc_conv3)
-        output_enc_conv4 = self.enc_eca4(output_enc_conv4)
+        output_enc_conv4 = self.se_layer4(output_enc_conv3)
+        output_enc_conv4 = self.enc_conv4(output_enc_conv4)
+        output_enc_conv4 = self.enc_cbam4(output_enc_conv4)
 
-        output_enc_conv5 = self.enc_conv5(output_enc_conv4)
-        output_enc_conv5 = self.enc_eca5(output_enc_conv5)
+        output_enc_conv5 = self.se_layer5(output_enc_conv4)
+        output_enc_conv5 = self.enc_conv5(output_enc_conv5)
+        output_enc_conv5 = self.enc_cbam5(output_enc_conv5)
+
+        # output_enc_conv1 = self.enc_conv1(input_x)
+        #
+        # output_enc_conv2 = self.enc_conv2(output_enc_conv1)
+        #
+        # output_enc_conv3 = self.enc_conv3(output_enc_conv2)
+        #
+        # output_enc_conv4 = self.enc_conv4(output_enc_conv3)
+        #
+        # output_enc_conv5 = self.enc_conv5(output_enc_conv4)
 
         #  Decoder
         output_dec_conv1 = self.dec_conv1(output_enc_conv5)
@@ -153,15 +196,20 @@ class DiscrimiterNet(torch.nn.Module):
 
 
 
-#
-# if __name__=='__main__':
-#     # 创建模型实例
-#     netG = GeneratorNet()
-#
-#     # 生成随机输入数据
-#     input_x = torch.randn(1, 3, 256, 256)
-#
-#     # 前向传播
-#     output = netG(input_x, button=1)
-#
-#     print(f"Output shape: {output.shape}")
+
+if __name__=='__main__':
+    import datetime
+    a = datetime.datetime.now()
+    # 创建模型实例
+    netG = GeneratorNet()
+
+    # 生成随机输入数据
+    input_x = torch.randn(1, 3, 256, 256)
+
+    # 前向传播
+    output = netG(input_x)
+    summary(netG, (1, 3, 256, 256))
+
+    print(f"Output shape: {output.shape}")
+    b = datetime.datetime.now()
+    print(b-a)

@@ -19,7 +19,7 @@ from torchinfo import summary
 from tensorboardX import SummaryWriter
 from utils import img2tensor,tensor2img
 from eval_index import main_calculate
-from net01 import GeneratorNet, DiscrimiterNet
+from netv0_5 import GeneratorNet, DiscrimiterNet
 from torch.utils.data import Dataset, DataLoader
 
 
